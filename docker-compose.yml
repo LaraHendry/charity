@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  e2e-tests:
+    build:
+      context: ../..
+      dockerfile: tests/docker/Dockerfile
+    volumes:
+      - ../../:/app
+    env_file:
+      - ../../.env
+    ports:
+      - "3000:3000"
+      - "8081:8081"
