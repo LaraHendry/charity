@@ -1,0 +1,21 @@
+FROM node:20.12.2@sha256:844b41cf784f66d7920fd673f7af54ca7b81e289985edc6cd864e7d05e0d133c
+
+ENV PATH="/usr/bin:${PATH}"
+
+WORKDIR /clarity-app
+
+COPY package*.json ./
+
+RUN npm i
+RUN npx playwright install --with-deps chromium
+
+COPY . .
+
+# Comment this line for local e2e development with UI
+CMD ["npm", "run", "test:e2e:ui"]
+
+# Comment this line for local e2e development without UI
+#CMD ["npm", "run", "test:e2e"]
+
+# Uncomment this line for local e2e development
+#CMD ["tail", "-f", "/dev/null"]
