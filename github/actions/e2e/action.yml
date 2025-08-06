@@ -1,0 +1,58 @@
+name: End to End
+description: Run Playwright tests and generate a coverage report
+
+inputs:
+  url:
+    description: "The URL to test"
+    required: true
+  email:
+    description: "The email to use for testing"
+    required: true
+  password:
+    description: "The password to use for testing"
+    required: true
+  otp-secret:
+    description: "The OTP secret to use for testing"
+    required: true
+  service-url:
+    description: "The URL of the Microsoft Playwright service to run the tests"
+    required: true
+  service-access-token:
+    description: "The access token for the Microsoft Playwright service"
+    required: true
+  run-id:
+    description: "The run ID for the Microsoft Playwright service"
+    default: ${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+    required: false
+  webhook-url:
+    description: "The URL to post results to a MS Teams Channel. Will not post if not provided"
+    required: false
+  webhook-report-title:
+    description: "The title of the message being sent in the webhook"
+    required: false
+  webhook-report-notify-users:
+    description: Comma seperated list of users to notify in Teams when test runs fail
+    required: false
+  api-url:
+    description: api url
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run tests
+      shell: bash
+      run: npx playwright test --config=playwright.service.config.ts
+      env:
+        CI: true
+        URL: ${{ inputs.url }}
+        EMAIL: ${{ inputs.email }}
+        PASSWORD: ${{ inputs.password }}
+        OTP_MASTER_SECRET: ${{ inputs.otp-secret }}
+        PLAYWRIGHT_SERVICE_URL: ${{ inputs.service-url }}
+        PLAYWRIGHT_SERVICE_RUN_ID: ${{ inputs.run-id }}
+        PLAYWRIGHT_SERVICE_ACCESS_TOKEN: ${{ inputs.service-access-token }}
+        TEAMS_REPORT_URL: ${{ inputs.webhook-url }}
+        TEAMS_REPORT_TITLE: ${{ inputs.webhook-report-title }}
+        TEAMS_REPORT_FAILED_MENTIONS: ${{ inputs.webhook-report-notify-users }}
+        API_URL: ${{ inputs.api-url }}
