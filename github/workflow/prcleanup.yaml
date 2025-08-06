@@ -1,0 +1,100 @@
+name: PR Cleanup
+
+on:
+  pull_request:
+    types: [closed, unlabeled]
+
+env:
+  RESOURCE_GROUP: dev-asp-linux-rg
+
+jobs:
+  cleanup-dev:
+    name: Cleanup Dev preview environment
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.SLOT_MANAGER_CREDENTIALS }}
+      - name: Delete deployment slot
+        run: az webapp deployment slot delete -g ${{ env.RESOURCE_GROUP }} -n dev-clarity-wa -s preview-${{ github.event.number }}
+
+      - name: Delete GitHub Deployment
+        uses: strumwolf/delete-deployment-environment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: "PR: ${{ github.head_ref }}"
+          onlyRemoveDeployments: true
+
+  cleanup-storybook:
+    name: Cleanup Storybook preview environment
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.SLOT_MANAGER_CREDENTIALS }}
+
+      - name: Delete deployment slot
+        run: az webapp deployment slot delete -g ${{ env.RESOURCE_GROUP }} -n dev-storybook-wa -s preview-${{ github.event.number }}
+
+      - name: Delete GitHub Deployment
+        uses: strumwolf/delete-deployment-environment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: "PR Storybook: ${{ github.head_ref }}"
+          onlyRemoveDeployments: true
+
+  cleanup-e2e-reports:
+    if: ${{ github.event.action == 'closed' }}
+    name: Cleanup E2E test reports
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    steps:
+      - name: Delete GitHub Deployment
+        uses: strumwolf/delete-deployment-environment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: "E2E Results: ${{ github.head_ref }}"
+          onlyRemoveDeployments: true
+
+  comment-on-pr:
+    needs: [cleanup-dev, cleanup-storybook]
+    runs-on: ubuntu-latest
+    name: Comment on PR
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: 'Removed dev and storybook preview slots'
+            })
+
+  cleanup-label:
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'preview:dev') }}
+    name: Remove Preview Label
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: remove dev label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.removeLabel({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: ["preview:dev"]
+            })
