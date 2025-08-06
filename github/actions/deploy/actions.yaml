@@ -1,0 +1,68 @@
+name: Deploy
+
+inputs:
+  app-name:
+    description: "The name of the Azure Web App to deploy to"
+    required: true
+  resource-group:
+    description: "The resource group for the Azure Web App"
+    required: false
+    default: "dev-asp-linux-rg"
+  subscription:
+    description: "The Azure subscription to use"
+    required: false
+    default: "69ac270a-6f7c-4c35-9fa0-c3389a5fd937"
+  slot-name:
+    description: "The name of the slot to deploy to"
+    required: false
+  slot-manager-credentials:
+    description: "The credentials to use for managing slots"
+    required: true
+  build-command:
+    description: "The command to run to build the project"
+    required: false
+    default: "npm run build:dev"
+  build-path:
+    description: "The path to the artifact to deploy"
+    required: false
+    default: "./build"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Build
+      shell: bash
+      run: ${{ inputs.build-command }}
+
+    - name: Zip build folder
+      shell: bash
+      run: zip -r build.zip ${{ inputs.build-path }}
+
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: ${{ inputs.slot-manager-credentials }}
+
+    - name: Create slot
+      if: ${{ inputs.slot-name }}
+      shell: bash
+      run: |
+        if ! az webapp deployment slot list -g ${{ inputs.resource-group }} -n ${{ inputs.app-name }} --subscription ${{ inputs.subscription }} | jq -r '.[].name' | grep -q ${{ inputs.slot-name }}; then
+          az webapp deployment slot create -g ${{ inputs.resource-group }} -n ${{ inputs.app-name }} -s ${{ inputs.slot-name }} --configuration-source ${{ inputs.app-name }} --subscription ${{ inputs.subscription }}
+          az webapp traffic-routing set -g ${{ inputs.resource-group }} -n ${{ inputs.app-name }} --distribution $(az webapp deployment slot list -g ${{ inputs.resource-group }} -n ${{ inputs.app-name }} --subscription ${{ inputs.subscription }} | jq -r '.[].name' | while read -r slot; do echo -n "$slot=0 "; done)
+        fi
+
+    - name: Get Publish Profile
+      id: get-publish-profile
+      shell: bash
+      run: |
+        SLOT=${{ inputs.slot-name }}
+        echo "publish-profile=$(az webapp deployment list-publishing-profiles -g ${{ inputs.resource-group }} -n ${{ inputs.app-name }} ${SLOT:+ -s $SLOT} --subscription ${{ inputs.subscription }} --xml)" >> $GITHUB_OUTPUT
+
+    - name: Deploy
+      uses: azure/webapps-deploy@v3
+      with:
+        app-name: ${{ inputs.app-name }}
+        publish-profile: ${{ steps.get-publish-profile.outputs.publish-profile }}
+        package: ./build.zip
+        slot-name: ${{ inputs.slot-name || 'production' }}
