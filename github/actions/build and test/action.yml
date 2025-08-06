@@ -1,0 +1,26 @@
+name: Build and Test
+description: Run build and test steps
+
+inputs:
+  collect-coverage:
+    description: 'Whether to generate a coverage report'
+    required: false
+    default: 'false'
+    
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Build
+      shell: bash
+      run: npm run build
+
+    - name: Run Unit tests
+      if: ${{ inputs.collect-coverage == 'false' }}
+      shell: bash
+      run: npm test
+
+    - name: Run Unit tests with coverage
+      if: ${{ inputs.collect-coverage == 'true' }}
+      shell: bash
+      run: npm run coverage
