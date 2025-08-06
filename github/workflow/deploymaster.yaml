@@ -1,0 +1,231 @@
+name: Deploy
+
+on:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+
+env:
+  DEV_RESOURCE_GROUP: dev-asp-linux-rg
+  DEV_APP_NAME: dev-clarity-wa
+  DEV_STORYBOOK_APP_NAME: dev-storybook-wa
+  DEV_SUBSCRIPTION: 69ac270a-6f7c-4c35-9fa0-c3389a5fd937
+  STAGING_RESOURCE_GROUP: stg-clarity-rg
+  STAGING_APP_NAME: stg-clarity-wa
+  STAGING_SUBSCRIPTION: 2ccbd8fd-1a6f-4347-b29a-8e693e9fcb0d
+  PROD_APP_NAME: prod-uks-clarity-wa
+  PROD_RESOURCE_GROUP: prod-clarity-rg
+  PROD_SUBSCRIPTION: ad6a013f-0516-411f-86ab-daa0de92f672
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    name: Deploy to Dev
+    environment:
+      name: dev
+      url: https://clarity.dev.quorumcyber.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Deploy dev
+        uses: ./.github/actions/deploy
+        with:
+          app-name: ${{ env.DEV_APP_NAME }}
+          resource-group: ${{ env.DEV_RESOURCE_GROUP }}
+          subscription: ${{ env.DEV_SUBSCRIPTION }}
+          slot-manager-credentials: ${{ secrets.SLOT_MANAGER_CREDENTIALS }}
+
+  deploy-storybook:
+    runs-on: ubuntu-latest
+    name: deploy to Storybook
+    environment:
+      name: storybook
+      url: https://storybook.dev.quorumcyber.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Deploy Storybook
+        uses: ./.github/actions/deploy
+        with:
+          app-name: ${{ env.DEV_STORYBOOK_APP_NAME }}
+          build-command: "npm run build:storybook"
+          build-path: "./storybook-static"
+          resource-group: ${{ env.DEV_RESOURCE_GROUP }}
+          subscription: ${{ env.DEV_SUBSCRIPTION }}
+          slot-manager-credentials: ${{ secrets.SLOT_MANAGER_CREDENTIALS }}
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    name: End to End tests
+    needs: [deploy-dev]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: End to End
+        uses: ./.github/actions/end-to-end
+        with:
+          url: https://clarity.dev.quorumcyber.com/
+          email: ${{ secrets.END_TO_END_EMAIL_DEV }}
+          password: ${{ secrets.END_TO_END_PASSWORD_DEV }}
+          otp-secret: ${{ secrets.END_TO_END_OTP_SECRET_DEV }}
+          service-url: ${{ secrets.PLAYWRIGHT_SERVICE_URL }}
+          service-access-token: ${{ secrets.PLAYWRIGHT_SERVICE_ACCESS_TOKEN }}
+          api-url: ${{ secrets.END_TO_END_API_URL_DEV }}
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    needs: [e2e-tests]
+    environment:
+      name: staging
+      url: https://clarity.staging.quorumcyber.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Deploy to staging
+        uses: ./.github/actions/deploy
+        with:
+          app-name: ${{ env.STAGING_APP_NAME }}
+          build-command: "npm run build:staging"
+          resource-group: ${{ env.STAGING_RESOURCE_GROUP }}
+          slot-manager-credentials: ${{ secrets.SLOT_MANAGER_CREDENTIALS }}
+          subscription: ${{ env.STAGING_SUBSCRIPTION }}
+
+  deploy-pre-prod:
+    runs-on: ubuntu-latest
+    name: Deploy to Pre-prod
+    needs: [e2e-tests]
+    concurrency:
+      group: prod-deploy
+      cancel-in-progress: true
+    environment:
+      name: pre-prod
+      url: https://clarity.quorumcyber.com?slot=pre-prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Deploy to pre-prod
+        uses: ./.github/actions/deploy
+        with:
+          app-name: ${{ env.PROD_APP_NAME }}
+          build-command: "npm run build"
+          resource-group: ${{ env.PROD_RESOURCE_GROUP }}
+          slot-name: pre-prod
+          slot-manager-credentials: ${{ secrets.SLOT_MANAGER_CREDENTIALS }}
+          subscription: ${{ env.PROD_SUBSCRIPTION }}
+
+  # This step is approved within Github - it is congigured in the prod environment settings
+  deploy-prod:
+    runs-on: ubuntu-latest
+    name: Deploy to production
+    needs: [deploy-pre-prod]
+    concurrency:
+      group: prod-deploy
+      cancel-in-progress: true
+    environment:
+      name: prod
+      url: https://clarity.quorumcyber.com
+    steps:
+      - name: Log into Azure CLI with service principal
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.SLOT_MANAGER_CREDENTIALS }}
+
+      - name: 🔁 Swap slots
+        run: az webapp deployment slot swap -s pre-prod -n ${{ env.PROD_APP_NAME }} -g ${{ env.PROD_RESOURCE_GROUP }} --subscription ${{ env.PROD_SUBSCRIPTION }}
+
+  tag:
+    runs-on: ubuntu-latest
+    name: Create deployment Git tag
+    needs: [deploy-prod]
+    permissions:
+      contents: write
+    steps:
+      - name: 📅 get date
+        id: get-date
+        run: echo "date=$(date +'%Y-%m-%dT%H-%M-%S')" >> $GITHUB_OUTPUT
+
+      - name: 🏷️ Create tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'refs/tags/deployment-${{ steps.get-date.outputs.date }}',
+              sha: context.sha
+            })
+
+  notify:
+    runs-on: ubuntu-latest
+    name: Send Teams notification
+    needs: [tag]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest two git tags
+        id: tags
+        run: |
+          latest_tag=$(git tag --sort=-creatordate | sed -n 1p)
+          previous_tag=$(git tag --sort=-creatordate | sed -n 2p)
+          echo "Latest tag: $latest_tag"
+          echo "Previous tag: $previous_tag"
+          echo "previous-tag=$previous_tag" >> $GITHUB_OUTPUT
+          echo "latest-tag=$latest_tag" >> $GITHUB_OUTPUT
+
+      - name: 📢 Notify
+        run: |
+          curl -X POST -H "Content-Type: application/json" -d '{
+            "@type": "MessageCard",
+            "@context": "http://schema.org/extensions",
+            "summary": "Deployment to Clarity production",
+            "sections": [
+              {
+                "activityTitle": "Successful Deployment 🚀",
+                "activitySubtitle": "Deployment to production",
+                "activityImage": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+                "facts": [
+                  {
+                    "name": "Repository",
+                    "value": "${{ github.repository }}"
+                  },
+                  {
+                    "name": "Deployment tag",
+                    "value": "${{ steps.tags.outputs.latest-tag }}"
+                  }
+                ],
+                "markdown": true
+              }
+            ],
+            potentialAction: [
+              {
+                "@type": "OpenUri",
+                "name": "View code changes",
+                "targets": [{
+                "os": "default",
+                "uri": "https://github.com/${{ github.repository }}/compare/${{ steps.tags.outputs.previous-tag }}...${{ steps.tags.outputs.latest-tag }}"
+                }]
+                },
+                {
+                "@type": "OpenUri",
+                "name": "View Clarity",
+                "targets": [{
+                "os": "default",
+                "uri": "https://clarity.quorumcyber.com"
+                }]
+              } 
+            ],
+          }' ${{ secrets.DEPLOY_TEAMS_WEBHOOK_URI }}
