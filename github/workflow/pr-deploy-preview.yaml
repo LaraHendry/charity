@@ -1,0 +1,49 @@
+name: Pull Request Preview Deploy
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview-env:
+    name: Deploy Preview Environment
+    # this job only runs if the preview label is set
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'preview:dev') || (github.event.action == 'labeled' && github.event.label.name == 'preview:dev') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: "PR: ${{ github.head_ref }}"
+      url: https://clarity.dev.quorumcyber.com?slot=preview-${{ github.event.number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - uses: ./.github/actions/deploy
+        with:
+          app-name: dev-clarity-wa
+          slot-name: preview-${{ github.event.number }}
+          slot-manager-credentials: ${{ secrets.SLOT_MANAGER_CREDENTIALS }}
+
+  deploy-storybook:
+    name: Deploy Storybook preview
+    # this job only runs if the preview label is set
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'preview:dev') || (github.event.action == 'labeled' && github.event.label.name == 'preview:dev') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: "PR Storybook: ${{ github.head_ref }}"
+      url: https://storybook.dev.quorumcyber.com?slot=preview-${{ github.event.number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - uses: ./.github/actions/deploy
+        with:
+          app-name: dev-storybook-wa
+          slot-name: preview-${{ github.event.number }}
+          slot-manager-credentials: ${{ secrets.SLOT_MANAGER_CREDENTIALS }}
+          build-path: "./storybook-static"
+          build-command: "npm run build:storybook"
