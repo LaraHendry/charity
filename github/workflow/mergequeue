@@ -1,0 +1,87 @@
+name: Merge Queue Pipeline
+
+on:
+  merge_group:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Build
+        run: npm run build
+
+  test-shard:
+    runs-on: ubuntu-latest
+    name: Test Shard
+    strategy:
+      matrix:
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Test
+        run: npm run test -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+
+  test:
+    runs-on: ubuntu-latest
+    name: Test
+    needs: test-shard
+    if: always()
+    steps:
+      - name: All tests ok
+        if: ${{ !(contains(needs.*.result, 'failure')) }}
+        run: exit 0
+      - name: Some tests failed
+        if: ${{ contains(needs.*.result, 'failure') }}
+        run: exit 1
+
+  end-to-end:
+    runs-on: ubuntu-latest
+    name: End to End
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: End to End
+        uses: ./.github/actions/end-to-end
+        with:
+          url: http://localhost:3000
+          email: ${{ secrets.END_TO_END_EMAIL_DEV }}
+          password: ${{ secrets.END_TO_END_PASSWORD_DEV }}
+          otp-secret: ${{ secrets.END_TO_END_OTP_SECRET_DEV }}
+          service-url: ${{ secrets.PLAYWRIGHT_SERVICE_URL }}
+          service-access-token: ${{ secrets.PLAYWRIGHT_SERVICE_ACCESS_TOKEN }}
+          api-url: ${{ secrets.END_TO_END_API_URL_DEV }}
+
+  # The below steps have to be added in as a workaround. We don't want to run all of the checks that have just run for a PR,
+  # however there is no way to configure different required steps in merge queues to pull requests
+  # https://github.com/orgs/community/discussions/46757#discussioncomment-10099274
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint
+    steps:
+      - run: echo "Lint"
+
+  type-check:
+    runs-on: ubuntu-latest
+    name: Type Check
+    steps:
+      - run: echo "Type Check"
+
+  check-title-and-description:
+    runs-on: ubuntu-latest
+    name: Check title and description
+    steps:
+      - run: echo "Check Title and Description"
