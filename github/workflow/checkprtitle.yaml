@@ -1,0 +1,24 @@
+name: Pull Request Title/Body Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited]
+
+jobs:
+  validate-pull-request:
+    runs-on: ubuntu-latest
+    name: Check title and description
+    steps:
+      - name: Check PR Title
+        run: echo "${{ github.event.pull_request.title }}" | grep -E "^.*\#[0-9]+.*$" || (echo "PR title must contain an issue number" && exit 1)
+
+      - name: Check PR Description
+        # pass the PR description to grep (in a way that works with newlines and special characters)
+        # look for any markdown unchecked boxes [ ], count how many we found
+        # fail if count is not equal to 0
+        run: |
+          unchecked_count=$(echo "${{ github.event.pull_request.body }}" | grep -Eo "\[\s\]" | wc -l)
+          if [[ $unchecked_count -ne 0 ]]; then
+            echo "$unchecked_count unchecked tasks in the PR description"
+            exit 1
+          fi
