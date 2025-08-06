@@ -1,0 +1,62 @@
+name: E2E scheduled runs
+on:
+  schedule:
+    # Runs at 18:30 UTC (6:30 PM UTC) every Monday through Friday
+    - cron: "30 18 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  e2e-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, prod]
+        include:
+          - environment: dev
+            url: https://clarity.dev.quorumcyber.com/
+            email: END_TO_END_EMAIL_DEV
+            password: END_TO_END_PASSWORD_DEV
+            otp-secret: END_TO_END_OTP_SECRET_DEV
+            deploy-key: PRIVATE_KEY_DEV_E2E_REPORT_SCHEDULED
+            report-repo: dev-e2e-allure-report-scheduled
+            branch: master
+            api-url: END_TO_END_API_URL_DEV
+          - environment: prod
+            url: https://clarity.quorumcyber.com/
+            email: END_TO_END_EMAIL_PROD
+            password: END_TO_END_PASSWORD_PROD
+            otp-secret: END_TO_END_OTP_SECRET_PROD
+            deploy-key: PRIVATE_KEY_PRD_E2E_REPORT_SCHEDULED
+            report-repo: prd-e2e-allure-report-scheduled
+            branch: master
+            api-url: END_TO_END_API_URL_PROD
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run E2E Tests
+        uses: ./.github/actions/end-to-end
+        with:
+          url: ${{ matrix.url }}
+          email: ${{ secrets[matrix.email] }}
+          password: ${{ secrets[matrix.password] }}
+          otp-secret: ${{ secrets[matrix.otp-secret] }}
+          service-url: ${{ secrets.PLAYWRIGHT_SERVICE_URL }}
+          service-access-token: ${{ secrets.PLAYWRIGHT_SERVICE_ACCESS_TOKEN }}
+          run-id: Scheduled-${{ matrix.environment }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          webhook-url: ${{secrets.E2E_RESULTS_WEBHOOK_URL}}
+          webhook-report-title: Scheduled E2E results (${{ matrix.environment }})
+          api-url: ${{ secrets[matrix.api-url] }}
+          webhook-report-notify-users: ${{ vars.E2E_RESULTS_NOTIFY_LIST }}
