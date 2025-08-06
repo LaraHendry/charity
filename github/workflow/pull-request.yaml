@@ -1,0 +1,137 @@
+name: Pull Request
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Build
+        run: npm run build
+
+  test-shard:
+    runs-on: ubuntu-latest
+    name: Test Shard
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Test
+        run: VITEST_SHARD=${{ matrix.shardIndex }} npm run test -- --coverage --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.shardIndex }}
+          path: ./coverage/*
+          include-hidden-files: true
+          retention-days: 1
+
+  test:
+    runs-on: ubuntu-latest
+    name: Test
+    needs: test-shard
+    if: always()
+    steps:
+      - name: All tests ok
+        if: ${{ !(contains(needs.*.result, 'failure')) }}
+        run: exit 0
+      - name: Some tests failed
+        if: ${{ contains(needs.*.result, 'failure') }}
+        run: exit 1
+
+  merge-reports:
+    runs-on: ubuntu-latest
+    name: Merge Reports
+    if: ${{ !cancelled() }}
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Download coverage reports
+        uses: actions/download-artifact@v4
+        with:
+          path: ./coverage
+          pattern: coverage-report-*
+          merge-multiple: true
+
+      - name: Merge reports
+        run: |
+          npx nyc merge ./coverage ./.nyc_output/coverage.json
+          npx nyc report --reporter=text --reporter=lcov
+
+      - name: SonarCloud Scan
+        if: ${{ github.base_ref == 'master' }}
+        uses: sonarsource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Lint
+        run: npm run lint
+
+  type-check:
+    runs-on: ubuntu-latest
+    name: Type Check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Type Check
+        run: npm run typecheck
+
+  end-to-end:
+    runs-on: ubuntu-latest
+    name: End to End
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: End to End
+        uses: ./.github/actions/end-to-end
+        with:
+          url: http://localhost:3000
+          email: ${{ secrets.END_TO_END_EMAIL_DEV }}
+          password: ${{ secrets.END_TO_END_PASSWORD_DEV }}
+          otp-secret: ${{ secrets.END_TO_END_OTP_SECRET_DEV }}
+          service-url: ${{ secrets.PLAYWRIGHT_SERVICE_URL }}
+          service-access-token: ${{ secrets.PLAYWRIGHT_SERVICE_ACCESS_TOKEN }}
+          api-url: ${{ secrets.END_TO_END_API_URL_DEV }}
