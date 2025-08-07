@@ -48,6 +48,21 @@ export class ListView {
   readonly detailsTab: Locator;
   readonly mdsText: Locator;
 
+  //Tags
+  //Status
+  readonly customerActionStatusTag: Locator;
+  readonly allOpenTag: Locator;
+  readonly resolvedTag: Locator;
+  readonly undeterminedTag: Locator;
+  readonly unspecifiedTag: Locator;
+
+  //Resolution
+  readonly closedByCustomerTag: Locator;
+  readonly unresolvedTag: Locator;
+  //Type
+  readonly cyberTypeTag: Locator;
+  readonly amdrTypeTag: Locator;
+
   constructor(page: Page) {
     this.page = page;
 
@@ -94,6 +109,17 @@ export class ListView {
     //Ticket view
     this.detailsTab = page.getByRole("tab", { name: "Details" });
     this.mdsText = page.getByText("MDS Incident");
+
+    //Tags
+    this.customerActionStatusTag = page.locator("dl").getByText("Customer Action");
+    this.allOpenTag = page.locator("dl").getByText("All Open");
+    this.cyberTypeTag = page.locator("dl").getByText("Cyber");
+    this.amdrTypeTag = page.locator("dl").getByText("AMDR");
+    this.resolvedTag = page.locator("dl").getByText("Resolved");
+    this.undeterminedTag = page.locator("dl").getByText("Undetermined");
+    this.unspecifiedTag = page.locator("dl").getByText("Unspecified");
+    this.closedByCustomerTag = page.locator("dl").getByText("Closed By Customer");
+    this.unresolvedTag = page.locator("dl").getByText("Unresolved");
   }
 
   // --- Actions & Assertions ---
