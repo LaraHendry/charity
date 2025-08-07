@@ -1,10 +1,21 @@
-import { expect, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 export class CommonFunctions {
   readonly page: Page;
 
+  readonly lastSevenDaysFilter: Locator;
+  readonly lastThirtyDaysFilter: Locator;
+  readonly lastNinetyDaysFilter: Locator;
+  readonly previousNinetyDaysFilter: Locator;
+  readonly applyButton: Locator;
+
   constructor(page: Page) {
     this.page = page;
+    this.lastSevenDaysFilter = page.getByRole("button", { name: "Last 7 days" });
+    this.lastThirtyDaysFilter = page.getByRole("button", { name: "Last 30 days" });
+    this.lastNinetyDaysFilter = page.getByRole("button", { name: "Last 90 days" });
+    this.previousNinetyDaysFilter = page.getByRole("button", { name: "Previous 90 days" });
+    this.applyButton = page.getByRole("button", { name: "Apply" });
   }
   /**
    *
