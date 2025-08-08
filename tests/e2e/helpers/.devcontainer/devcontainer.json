@@ -1,0 +1,29 @@
+{
+  "name": "Node.js",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "visualstudioexptteam.vscodeintellicode",
+        "jpoissonnier.vscode-styled-components",
+        "christian-kohler.npm-intellisense",
+        "ms-vsliveshare.vsliveshare",
+        "ms-vscode.azure-account",
+        "ms-azuretools.vscode-azurefunctions",
+        "ms-azuretools.vscode-azureresourcegroups",
+        "bradlc.vscode-tailwindcss",
+        "sonarsource.sonarlint-vscode"
+      ]
+    }
+  },
+  "forwardPorts": [3000],
+  "postCreateCommand": "npx playwright install --with-deps chromium",
+  "remoteUser": "node",
+  "containerEnv": {
+    "ENVIRONMENT": "DOCKER"
+  }
+}
