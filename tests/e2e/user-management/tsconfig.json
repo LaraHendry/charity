@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "types": ["vite/client", "vitest/globals"],
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "target": "ESNext",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+
+    "allowJs": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "noUnusedLocals": false,
+    "noImplicitReturns": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "*": ["src/*"],
+      "apps/*": ["./src/apps/*"],
+      "auth/*": ["./src/auth/*"],
+      "auth-common/*": ["./src/auth-common/*"],
+      "auth-new/*": ["src/auth-new/*"],
+      "lib/*": ["./src/lib/*"],
+      "mocks/*": ["./src/mocks/*"],
+      "__test__/*": ["./src/__test__/*"]
+    }
+  },
+  "include": ["src/**/*", "tests/**/*", ".storybook/**/*"],
+  "exclude": ["**/node_modules", "**/out", "**/build"]
+}
